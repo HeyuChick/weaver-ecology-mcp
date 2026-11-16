@@ -12,6 +12,27 @@ import forge from "node-forge";
 import { Buffer } from "node:buffer";
 
 /**
+ * PEM -> single-line base64 (Weaver cpk header format: no PEM armor, no newlines)
+ */
+export function pemToSingleLine(pem: string): string {
+  return pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+}
+
+/**
+ * Weaver returns spk as single-line base64; forge needs a full PEM.
+ * Wrap it with 64-char folding.
+ */
+export function ensurePem(singleLineKey: string): string {
+  if (singleLineKey.includes("BEGIN")) return singleLineKey;
+  const b64 = singleLineKey.replace(/\s+/g, "");
+  const lines = b64.match(/.{1,64}/g) || [];
+  return "-----BEGIN PUBLIC KEY-----\n" + lines.join("\n") + "\n-----END PUBLIC KEY-----";
+}
+
+/**
  * 生成 RSA 密钥对 (2048 位)
  */
 export function generateKeyPair(): { publicKeyPem: string; privateKeyPem: string } {
@@ -23,15 +44,13 @@ export function generateKeyPair(): { publicKeyPem: string; privateKeyPem: string
 }
 
 /**
- * 使用公钥加密 (RSA-OAEP / SHA-256)
- * 泛微 E9 的 rsa.encrypt 默认使用 RSA/ECB/OAEPWITHSHA-256ANDMGF1PADDING
+ * 使用公钥加密 (PKCS#1 v1.5)
+ * 实测泛微 E9 测试端 applytoken/userid 解密使用 RSAES-PKCS1-V1_5（OAEP 全系被拒）。
+ * 2026-11 对真实 E9 测试环境逐项实测：OAEP-SHA256/SOAEP-SHA1 均返回 secret解密失败。
  */
 export function rsaEncrypt(plainText: string, publicKeyPem: string): string {
-  const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-  const encrypted = publicKey.encrypt(plainText, "RSA-OAEP", {
-    md: forge.md.sha256.create(),
-    mgf: forge.mgf.mgf1.create(forge.md.sha256.create()),
-  });
+  const publicKey = forge.pki.publicKeyFromPem(ensurePem(publicKeyPem));
+  const encrypted = publicKey.encrypt(plainText, "RSAES-PKCS1-V1_5");
   return forge.util.encode64(encrypted);
 }
 

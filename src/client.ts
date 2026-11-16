@@ -4,7 +4,7 @@
  */
 
 import { WeaverConfig, TokenInfo, AuthRegistResponse, AuthApplyTokenResponse } from "./types.js";
-import { generateKeyPair, rsaEncrypt } from "./crypto.js";
+import { generateKeyPair, rsaEncrypt, pemToSingleLine } from "./crypto.js";
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // token 过期前 5 分钟刷新
 
@@ -43,9 +43,10 @@ export class WeaverClient {
   async register(): Promise<{ secrit: string; spk: string }> {
     const url = `${this.baseUrl}/api/ec/dev/auth/regist`;
 
+    // 泛微要求 cpk 为单行 base64（官方 demo 格式），多行 PEM 会被 HTTP 层拒绝
     const headers: Record<string, string> = {
       appid: this.appId,
-      cpk: this.publicKeyPem,
+      cpk: pemToSingleLine(this.publicKeyPem),
     };
 
     const response = await this.rawRequest<AuthRegistResponse>(url, "POST", headers);
@@ -125,6 +126,7 @@ export class WeaverClient {
     method: "GET" | "POST" | "PUT" | "DELETE" = "POST",
     params?: Record<string, unknown>,
     userId?: number,
+    jsonBody?: boolean,
   ): Promise<T> {
     const token = await this.getValidToken();
     const url = `${this.baseUrl}${path.startsWith("/") ? path : "/" + path}`;
@@ -139,7 +141,7 @@ export class WeaverClient {
       headers.userid = this.encryptUserId(userId);
     }
 
-    return this.rawRequest<T>(url, method, headers, params);
+    return this.rawRequest<T>(url, method, headers, params, jsonBody);
   }
 
   /**
@@ -149,6 +151,7 @@ export class WeaverClient {
     path: string,
     method: "GET" | "POST" | "PUT" | "DELETE" = "POST",
     params?: Record<string, unknown>,
+    jsonBody?: boolean,
   ): Promise<T> {
     const token = await this.getValidToken();
     const url = `${this.baseUrl}${path.startsWith("/") ? path : "/" + path}`;
@@ -159,7 +162,7 @@ export class WeaverClient {
       skipsession: "1",
     };
 
-    return this.rawRequest<T>(url, method, headers, params);
+    return this.rawRequest<T>(url, method, headers, params, jsonBody);
   }
 
   /**
@@ -170,22 +173,31 @@ export class WeaverClient {
     method: string,
     headers: Record<string, string>,
     body?: Record<string, unknown>,
+    jsonBody?: boolean,
   ): Promise<T> {
+    const contentType = jsonBody
+      ? "application/json; charset=UTF-8"
+      : "application/x-www-form-urlencoded; charset=UTF-8";
     const fetchOptions: RequestInit = {
       method,
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Content-Type": contentType,
         ...headers,
       },
     };
 
     if (body && method !== "GET") {
-      // 泛微 API 通常使用 form-urlencoded
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(body)) {
-        params.append(key, String(value));
+      if (jsonBody) {
+        // 泛微 paService 等接口读取整个 JSON body（request2Json）
+        fetchOptions.body = JSON.stringify(body);
+      } else {
+        // 泛微 API 通常使用 form-urlencoded
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(body)) {
+          params.append(key, String(value));
+        }
+        fetchOptions.body = params.toString();
       }
-      fetchOptions.body = params.toString();
     }
 
     const controller = new AbortController();

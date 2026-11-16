@@ -260,6 +260,10 @@ const API_REQUEST_TOOL: Tool = {
         type: "boolean",
         description: "是否为白名单接口（无需userid），默认为false",
       },
+      jsonBody: {
+        type: "boolean",
+        description: "以 application/json 发送整个 params 作为请求体（paService 写接口等需要），默认 false 走 form-urlencoded",
+      },
     },
     required: ["path"],
   },
@@ -459,14 +463,15 @@ async function main() {
             userId?: number;
             params?: Record<string, unknown>;
             isWhitelist?: boolean;
+            jsonBody?: boolean;
           };
           const method = a.method || "POST";
 
           let data: unknown;
           if (a.isWhitelist) {
-            data = await client.callWhitelistApi(a.path, method, a.params);
+            data = await client.callWhitelistApi(a.path, method, a.params, a.jsonBody);
           } else if (a.userId) {
-            data = await client.callApi(a.path, method, a.params, a.userId);
+            data = await client.callApi(a.path, method, a.params, a.userId, a.jsonBody);
           } else {
             return {
               isError: true,
