@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "weaver-ecology": {
+      "command": "node",
+      "args": [
+        ".opencode/plugins/weaver-ecology-plugin/dist/index.mjs"
+      ]
+    }
+  }
+}

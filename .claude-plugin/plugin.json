@@ -1,0 +1,9 @@
+{
+  "name": "weaver-ecology",
+  "displayName": "Weaver Ecology",
+  "description": "Connect Open One agents to Weaver Ecology E9 OA workflows, HR, documents, and custom APIs.",
+  "version": "1.0.0",
+  "skills": [
+    "skills/weaver-ecology"
+  ]
+}
